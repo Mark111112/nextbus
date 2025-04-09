@@ -1,0 +1,31 @@
+# Environment variables
+.env
+
+# Next.js directory
+.next/
+
+# Node.js directory
+node_modules/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Downloaded images
+buspic/
+
+# Data directory
+data/
+
+# Logs
+logs/
+*.log
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo 
+node_modules
+node_modules
