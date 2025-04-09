@@ -34,6 +34,7 @@ export interface Movie {
     name: string;
     url: string;
   }>;
+  tags?: string[]; // Tags displayed on movie cards (e.g., HD, 字幕, etc.)
   videoLength?: string;
   summary?: string;
   translated_summary?: string;

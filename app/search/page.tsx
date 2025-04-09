@@ -112,6 +112,29 @@ function SearchContent() {
     // Build parameters
     const params = new URLSearchParams();
     
+    // If no keyword but has filter, redirect to filter page
+    if (!searchQuery.trim() && selectedFilter && selectedFilterValue) {
+      const filterParams = new URLSearchParams();
+      filterParams.set('filterType', selectedFilter);
+      filterParams.set('filterValue', selectedFilterValue);
+      
+      if (includeMagnetless) {
+        filterParams.set('magnet', 'all');
+      }
+      
+      if (uncensoredOnly) {
+        filterParams.set('type', 'uncensored');
+      }
+      
+      if (currentPage > 1) {
+        filterParams.set('page', currentPage.toString());
+      }
+      
+      router.push(`/filter?${filterParams.toString()}`);
+      return;
+    }
+    
+    // Regular search with keyword
     if (searchQuery.trim()) {
       params.set('keyword', searchQuery.trim());
     }

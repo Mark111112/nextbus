@@ -54,6 +54,25 @@ export default function Home() {
     // Build search parameters
     const params = new URLSearchParams();
     
+    // If no keyword but has filter parameters, go to filter page
+    if (!searchQuery.trim() && selectedFilter && selectedFilterValue) {
+      const filterParams = new URLSearchParams();
+      filterParams.set('filterType', selectedFilter);
+      filterParams.set('filterValue', selectedFilterValue);
+      
+      if (includeMagnetless) {
+        filterParams.set('magnet', 'all');
+      }
+      
+      if (uncensoredOnly) {
+        filterParams.set('type', 'uncensored');
+      }
+      
+      router.push(`/filter?${filterParams.toString()}`);
+      return;
+    }
+    
+    // Regular search with or without keyword
     if (searchQuery.trim()) {
       params.set('keyword', searchQuery.trim());
     }

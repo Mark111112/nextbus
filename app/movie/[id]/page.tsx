@@ -259,7 +259,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
             )}
             {(movie.producer_obj || movie.producer) && (
               movie.producer_obj && movie.producer_obj.id ? (
-                <Link href={movie.producer_obj.url}>
+                <Link href={`/filter?filterType=studio&filterValue=${movie.producer_obj.id}`}>
                   <span className="badge bg-info">{movie.producer_obj.name}</span>
                 </Link>
               ) : (
@@ -268,7 +268,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
             )}
             {(movie.publisher_obj || movie.publisher) && (
               movie.publisher_obj && movie.publisher_obj.id ? (
-                <Link href={movie.publisher_obj.url}>
+                <Link href={`/filter?filterType=label&filterValue=${movie.publisher_obj.id}`}>
                   <span className="badge bg-info">{movie.publisher_obj.name}</span>
                 </Link>
               ) : (
@@ -277,7 +277,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
             )}
             {(movie.director_obj || movie.director) && (
               movie.director_obj && movie.director_obj.id ? (
-                <Link href={movie.director_obj.url}>
+                <Link href={`/filter?filterType=director&filterValue=${movie.director_obj.id}`}>
                   <span className="badge bg-info">{movie.director_obj.name}</span>
                 </Link>
               ) : (
@@ -286,7 +286,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
             )}
             {(movie.series_obj || movie.series) && (
               movie.series_obj && movie.series_obj.id ? (
-                <Link href={movie.series_obj.url}>
+                <Link href={`/filter?filterType=series&filterValue=${movie.series_obj.id}`}>
                   <span className="badge bg-info">{movie.series_obj.name}</span>
                 </Link>
               ) : (
@@ -356,7 +356,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
                     <div>
                       {movie.genres_obj && movie.genres_obj.length > 0 ? (
                         movie.genres_obj.map((genre, index) => (
-                          <Link key={index} href={genre.url || '#'}>
+                          <Link key={index} href={`/filter?filterType=genre&filterValue=${genre.id}`}>
                             <Badge 
                               bg="warning" 
                               text="white"
@@ -389,36 +389,38 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
                     <Row>
                       {movie.actors.map((actor) => (
                         <Col key={actor.id} xs={6} sm={4} md={4} lg={3} className="mb-3">
-                          <Link href={actor.url || `/search?keyword=${encodeURIComponent(actor.name)}`} passHref>
-                            <Card className="actor-card h-100">
-                              <div style={{ position: 'relative', height: '120px' }}>
-                                {actor.image_url ? (
-                                  <Image
-                                    src={`/api/images/${movie.id}/actor_${actor.id}.jpg`}
-                                    alt={actor.name}
-                                    fill
-                                    sizes="(max-width: 576px) 50vw, (max-width: 992px) 25vw, 16vw"
-                                    style={{ objectFit: 'cover' }}
-                                    onError={(e) => {
-                                      // If image fails to load, replace with placeholder
-                                      const target = e.target as HTMLImageElement;
-                                      target.src = '/placeholder.jpg';
-                                      target.onerror = null; // Prevent infinite error loops
-                                    }}
-                                  />
-                                ) : (
-                                  <div 
-                                    className="d-flex justify-content-center align-items-center bg-light h-100 w-100"
-                                    style={{ position: 'absolute' }}
-                                  >
-                                    <span className="text-muted">{actor.name.charAt(0)}</span>
-                                  </div>
-                                )}
-                              </div>
-                              <Card.Body className="p-2 text-center">
-                                <Card.Title style={{ fontSize: '0.9rem' }}>{actor.name}</Card.Title>
-                              </Card.Body>
-                            </Card>
+                          <Link href={`/filter?filterType=star&filterValue=${actor.id}`} legacyBehavior passHref>
+                            <a className="text-decoration-none">
+                              <Card className="actor-card h-100">
+                                <div style={{ position: 'relative', height: '120px' }}>
+                                  {actor.image_url ? (
+                                    <Image
+                                      src={`/api/images/${movie.id}/actor_${actor.id}.jpg`}
+                                      alt={actor.name}
+                                      fill
+                                      sizes="(max-width: 576px) 50vw, (max-width: 992px) 25vw, 16vw"
+                                      style={{ objectFit: 'cover' }}
+                                      onError={(e) => {
+                                        // If image fails to load, replace with placeholder
+                                        const target = e.target as HTMLImageElement;
+                                        target.src = '/placeholder.jpg';
+                                        target.onerror = null; // Prevent infinite error loops
+                                      }}
+                                    />
+                                  ) : (
+                                    <div 
+                                      className="d-flex justify-content-center align-items-center bg-light h-100 w-100"
+                                      style={{ position: 'absolute' }}
+                                    >
+                                      <span className="text-muted">{actor.name.charAt(0)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <Card.Body className="p-2 text-center">
+                                  <Card.Title style={{ fontSize: '0.9rem' }}>{actor.name}</Card.Title>
+                                </Card.Body>
+                              </Card>
+                            </a>
                           </Link>
                         </Col>
                       ))}
