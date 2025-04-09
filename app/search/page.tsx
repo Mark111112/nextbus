@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Container, Row, Col, Form, Button, Card, Pagination } from 'react-bootstrap';
 import Layout from '../../components/Layout';
@@ -11,7 +11,8 @@ import Image from 'next/image';
 
 type SearchType = 'id' | 'keyword' | 'actor';
 
-export default function Search() {
+// Create a separate component for the search functionality
+function SearchContent() {
   const searchParams = useSearchParams();
   
   // Search parameters
@@ -262,303 +263,320 @@ export default function Search() {
     );
   };
   
-  return (
-    <Layout>
-      <Container>
-        <h1 className="mb-4">搜索</h1>
-        
-        {/* Debug information */}
-        {showDebug && debugInfo.length > 0 && (
-          <div className="mb-4 p-3 bg-light border rounded">
-            <div className="d-flex justify-content-between mb-2">
-              <h5 className="m-0">调试信息</h5>
-              <Button 
-                variant="outline-secondary" 
-                size="sm"
-                onClick={() => setDebugInfo([])}
+  // Render search form
+  const renderSearchForm = () => {
+    return (
+      <Form onSubmit={handleSearchSubmit} className="mb-4">
+        <Row className="g-3">
+          <Col md={4}>
+            <Form.Group>
+              <Form.Label>搜索类型</Form.Label>
+              <Form.Select 
+                value={searchType} 
+                onChange={(e) => setSearchType(e.target.value as SearchType)}
               >
-                清除
-              </Button>
-            </div>
-            <div style={{maxHeight: '200px', overflowY: 'auto'}}>
-              {debugInfo.map((info, index) => (
-                <div key={index} className="border-bottom py-1">
-                  <small>{info}</small>
+                <option value="id">影片ID</option>
+                <option value="keyword">关键词</option>
+                <option value="actor">演员</option>
+              </Form.Select>
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group>
+              <Form.Label>搜索内容</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder={searchType === 'id' ? "输入影片ID" : searchType === 'keyword' ? "输入关键词" : "输入演员姓名"}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </Form.Group>
+          </Col>
+          <Col md={2} className="d-flex align-items-end">
+            <Button variant="primary" type="submit" className="w-100">
+              搜索
+            </Button>
+          </Col>
+        </Row>
+      </Form>
+    );
+  };
+  
+  // Render movie details
+  const renderMovieDetails = () => {
+    if (!movie) return null;
+    
+    return (
+      <Card className="mb-4">
+        <Card.Body>
+          <Row>
+            <Col md={3}>
+              {movie.poster_path ? (
+                <Image
+                  src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
+                  alt={movie.title}
+                  width={300}
+                  height={450}
+                  className="img-fluid rounded"
+                />
+              ) : (
+                <div className="bg-light d-flex align-items-center justify-content-center" style={{ height: '450px' }}>
+                  <span className="text-muted">无海报</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {/* Search form */}
-        <Card className="mb-4">
-          <Card.Body>
-            <Form onSubmit={handleSearchSubmit}>
-              <Row className="align-items-end">
-                <Col md={2}>
-                  <Form.Group className="mb-3 mb-md-0">
-                    <Form.Label>搜索类型</Form.Label>
-                    <Form.Select 
-                      value={searchType} 
-                      onChange={(e) => setSearchType(e.target.value as SearchType)}
-                    >
-                      <option value="id">影片 ID</option>
-                      <option value="keyword">关键字</option>
-                      <option value="actor">演员</option>
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={8}>
-                  <Form.Group className="mb-3 mb-md-0">
-                    <Form.Label>
-                      {searchType === 'id' ? '影片 ID' : 
-                       searchType === 'keyword' ? '关键字' : '演员名称'}
-                    </Form.Label>
-                    <Form.Control
-                      type="text"
-                      placeholder={
-                        searchType === 'id' ? '输入影片 ID...' : 
-                        searchType === 'keyword' ? '输入关键字...' : '输入演员名称...'
-                      }
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+              )}
+            </Col>
+            <Col md={9}>
+              <h2>{movie.title}</h2>
+              <p className="text-muted">{movie.release_date}</p>
+              <p>{movie.overview}</p>
+              
+              <h5 className="mt-4">演员</h5>
+              <div className="d-flex flex-wrap gap-2">
+                {movie.credits?.cast?.slice(0, 5).map((actor: { id: string; name: string }) => (
+                  <Link href={`/search?type=actor&name=${encodeURIComponent(actor.name)}`} key={actor.id}>
+                    <Button variant="outline-secondary" size="sm">
+                      {actor.name}
+                    </Button>
+                  </Link>
+                ))}
+              </div>
+            </Col>
+          </Row>
+        </Card.Body>
+      </Card>
+    );
+  };
+  
+  // Render keyword search results
+  const renderKeywordResults = () => {
+    if (keywordResults.length === 0) return null;
+    
+    return (
+      <div>
+        <h3 className="mb-3">搜索结果</h3>
+        <Row xs={1} md={2} lg={3} className="g-4">
+          {keywordResults.map(movie => (
+            <Col key={movie.id}>
+              <Card className="h-100">
+                {movie.poster_path ? (
+                  <Image
+                    src={`https://image.tmdb.org/t/p/w185${movie.poster_path}`}
+                    alt={movie.title}
+                    width={185}
+                    height={278}
+                    className="card-img-top"
+                  />
+                ) : (
+                  <div className="bg-light d-flex align-items-center justify-content-center" style={{ height: '278px' }}>
+                    <span className="text-muted">无海报</span>
+                  </div>
+                )}
+                <Card.Body>
+                  <Card.Title>{movie.title}</Card.Title>
+                  <Card.Text className="text-muted">{movie.release_date}</Card.Text>
+                  <Link href={`/search?type=id&id=${movie.id}`}>
+                    <Button variant="primary" size="sm">查看详情</Button>
+                  </Link>
+                </Card.Body>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+        {renderPagination()}
+      </div>
+    );
+  };
+  
+  // Render actor search results
+  const renderActorResults = () => {
+    if (actors.length === 0 && !actor) return null;
+    
+    if (actor) {
+      return (
+        <div>
+          <Card className="mb-4">
+            <Card.Body>
+              <Row>
+                <Col md={3}>
+                  {actor.profile_path ? (
+                    <Image
+                      src={`https://image.tmdb.org/t/p/w500${actor.profile_path}`}
+                      alt={actor.name}
+                      width={300}
+                      height={450}
+                      className="img-fluid rounded"
                     />
-                  </Form.Group>
+                  ) : (
+                    <div className="bg-light d-flex align-items-center justify-content-center" style={{ height: '450px' }}>
+                      <span className="text-muted">无照片</span>
+                    </div>
+                  )}
                 </Col>
-                <Col md={2}>
+                <Col md={9}>
+                  <h2>{actor.name}</h2>
+                  <p>{actor.biography}</p>
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+          
+          <h3 className="mb-3">参演电影</h3>
+          <Row xs={1} md={2} lg={3} className="g-4">
+            {actorMovies.map(movie => (
+              <Col key={movie.id}>
+                <Card className="h-100">
+                  {movie.poster_path ? (
+                    <Image
+                      src={`https://image.tmdb.org/t/p/w185${movie.poster_path}`}
+                      alt={movie.title}
+                      width={185}
+                      height={278}
+                      className="card-img-top"
+                    />
+                  ) : (
+                    <div className="bg-light d-flex align-items-center justify-content-center" style={{ height: '278px' }}>
+                      <span className="text-muted">无海报</span>
+                    </div>
+                  )}
+                  <Card.Body>
+                    <Card.Title>{movie.title}</Card.Title>
+                    <Card.Text className="text-muted">{movie.release_date}</Card.Text>
+                    <Link href={`/search?type=id&id=${movie.id}`}>
+                      <Button variant="primary" size="sm">查看详情</Button>
+                    </Link>
+                  </Card.Body>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </div>
+      );
+    }
+    
+    return (
+      <div>
+        <h3 className="mb-3">演员搜索结果</h3>
+        <Row xs={1} md={2} lg={3} className="g-4">
+          {actors.map(actor => (
+            <Col key={actor.id}>
+              <Card className="h-100">
+                {actor.profile_path ? (
+                  <Image
+                    src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
+                    alt={actor.name}
+                    width={185}
+                    height={278}
+                    className="card-img-top"
+                  />
+                ) : (
+                  <div className="bg-light d-flex align-items-center justify-content-center" style={{ height: '278px' }}>
+                    <span className="text-muted">无照片</span>
+                  </div>
+                )}
+                <Card.Body>
+                  <Card.Title>{actor.name}</Card.Title>
                   <Button 
                     variant="primary" 
-                    type="submit" 
-                    className="w-100" 
-                    disabled={loading}
-                  >
-                    {loading ? '搜索中...' : '搜索'}
-                  </Button>
-                </Col>
-              </Row>
-            </Form>
-          </Card.Body>
-        </Card>
-        
-        {/* Error message */}
-        {error && (
-          <div className="alert alert-danger mb-4">{error}</div>
-        )}
-        
-        {/* ID search results */}
-        {searchType === 'id' && movie && (
-          <div className="mb-5">
-            <Card>
-              <Row className="g-0">
-                <Col md={3}>
-                  <div style={{ position: 'relative', height: '100%', minHeight: '300px' }}>
-                    <Image
-                      src={movie.image_url || '/placeholder.jpg'}
-                      alt={movie.title}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 33vw"
-                      style={{ objectFit: 'cover' }}
-                    />
-                  </div>
-                </Col>
-                <Col md={9}>
-                  <Card.Body>
-                    <h2>{movie.translated_title || movie.title}</h2>
-                    <p className="text-muted">{movie.id} | {movie.date}</p>
-                    
-                    {movie.genres && movie.genres.length > 0 && (
-                      <div className="mb-3">
-                        <h5>类别</h5>
-                        <div>
-                          {movie.genres.map((genre, index) => (
-                            <span key={index} className="badge bg-secondary me-1 mb-1">
-                              {genre}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {movie.actors && movie.actors.length > 0 && (
-                      <div className="mb-3">
-                        <h5>演员</h5>
-                        <div>
-                          {movie.actors.map((actor) => (
-                            <Link 
-                              key={actor.id} 
-                              href={`/search?type=actor&name=${encodeURIComponent(actor.name)}`}
-                              className="text-decoration-none me-2"
-                            >
-                              <span className="badge bg-info">{actor.name}</span>
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <Link href={`/movie/${movie.id}`} passHref>
-                      <Button variant="primary">查看详情</Button>
-                    </Link>
-                  </Card.Body>
-                </Col>
-              </Row>
-            </Card>
-          </div>
-        )}
-        
-        {/* Keyword search results */}
-        {searchType === 'keyword' && keywordResults.length > 0 && (
-          <div className="mb-5">
-            <h2 className="mb-3">搜索结果</h2>
-            <Row>
-              {keywordResults.map((movie) => (
-                <Col key={movie.id} xs={12} sm={6} md={3} className="mb-4">
-                  <Link href={`/movie/${movie.id}`} passHref>
-                    <Card className="h-100 movie-card">
-                      <div style={{ position: 'relative', height: '280px' }}>
-                        <Image
-                          src={movie.image_url || '/placeholder.jpg'}
-                          alt={movie.title}
-                          fill
-                          sizes="(max-width: 576px) 100vw, (max-width: 992px) 50vw, 25vw"
-                          style={{ objectFit: 'cover' }}
-                        />
-                      </div>
-                      <Card.Body>
-                        <Card.Title style={{ fontSize: '0.9rem' }}>
-                          {movie.translated_title || movie.title}
-                        </Card.Title>
-                        <Card.Text>
-                          <small className="text-muted">{movie.id}</small>
-                          <br />
-                          <small className="text-muted">{movie.date}</small>
-                        </Card.Text>
-                      </Card.Body>
-                    </Card>
-                  </Link>
-                </Col>
-              ))}
-            </Row>
-            
-            {/* Pagination */}
-            {renderPagination()}
-          </div>
-        )}
-        
-        {/* Actor search results - multiple actors */}
-        {searchType === 'actor' && actors.length > 1 && !actor && (
-          <div className="mb-5">
-            <h2 className="mb-3">演员搜索结果</h2>
-            <Row>
-              {actors.map((actor) => (
-                <Col key={actor.id} xs={12} sm={6} md={3} className="mb-4">
-                  <Card 
-                    className="h-100 actor-card"
+                    size="sm"
                     onClick={() => handleActorSelect(actor.id)}
-                    style={{ cursor: 'pointer' }}
                   >
-                    <div style={{ position: 'relative', height: '200px' }}>
-                      <Image
-                        src={actor.image_url || '/placeholder.jpg'}
-                        alt={actor.name}
-                        fill
-                        sizes="(max-width: 576px) 100vw, (max-width: 992px) 50vw, 25vw"
-                        style={{ objectFit: 'cover' }}
-                      />
-                    </div>
-                    <Card.Body className="text-center">
-                      <Card.Title>{actor.name}</Card.Title>
-                    </Card.Body>
-                  </Card>
-                </Col>
-              ))}
-            </Row>
+                    查看详情
+                  </Button>
+                </Card.Body>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </div>
+    );
+  };
+  
+  // Render debug information
+  const renderDebugInfo = () => {
+    if (!showDebug) return null;
+    
+    return (
+      <div className="mt-4 p-3 bg-light rounded">
+        <h5>调试信息</h5>
+        <div className="d-flex justify-content-between mb-2">
+          <Button 
+            variant="outline-secondary" 
+            size="sm"
+            onClick={() => setShowDebug(false)}
+          >
+            隐藏调试信息
+          </Button>
+          <Button 
+            variant="outline-secondary" 
+            size="sm"
+            onClick={() => setDebugInfo([])}
+          >
+            清除调试信息
+          </Button>
+        </div>
+        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+          {debugInfo.map((info, index) => (
+            <div key={index} className="mb-1">
+              <small>{info}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+  
+  return (
+    <Layout>
+      <Container className="py-4">
+        <h1 className="mb-4">电影搜索</h1>
+        
+        {renderSearchForm()}
+        
+        {loading && (
+          <div className="text-center my-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">加载中...</span>
+            </div>
+            <p className="mt-2">正在搜索，请稍候...</p>
           </div>
         )}
         
-        {/* Actor details with movies */}
-        {searchType === 'actor' && actor && (
-          <div className="mb-5">
-            <Card className="mb-4">
-              <Row className="g-0">
-                <Col md={3}>
-                  <div style={{ position: 'relative', height: '100%', minHeight: '300px' }}>
-                    <Image
-                      src={actor.image_url || '/placeholder.jpg'}
-                      alt={actor.name}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 33vw"
-                      style={{ objectFit: 'cover' }}
-                    />
-                  </div>
-                </Col>
-                <Col md={9}>
-                  <Card.Body>
-                    <h2>{actor.name}</h2>
-                    
-                    {actor.birthdate && (
-                      <p><strong>生日:</strong> {actor.birthdate} {actor.age && `(${actor.age}岁)`}</p>
-                    )}
-                    
-                    {actor.height && (
-                      <p><strong>身高:</strong> {actor.height}</p>
-                    )}
-                    
-                    {actor.measurements && (
-                      <p><strong>三围:</strong> {actor.measurements}</p>
-                    )}
-                    
-                    {actor.birthplace && (
-                      <p><strong>出生地:</strong> {actor.birthplace}</p>
-                    )}
-                    
-                    {actor.hobby && (
-                      <p><strong>爱好:</strong> {actor.hobby}</p>
-                    )}
-                  </Card.Body>
-                </Col>
-              </Row>
-            </Card>
-            
-            <h3 className="mb-3">出演作品</h3>
-            <Row>
-              {actorMovies.length > 0 ? (
-                actorMovies.map((movie) => (
-                  <Col key={movie.id} xs={12} sm={6} md={3} className="mb-4">
-                    <Link href={`/movie/${movie.id}`} passHref>
-                      <Card className="h-100 movie-card">
-                        <div style={{ position: 'relative', height: '280px' }}>
-                          <Image
-                            src={movie.image_url || '/placeholder.jpg'}
-                            alt={movie.title}
-                            fill
-                            sizes="(max-width: 576px) 100vw, (max-width: 992px) 50vw, 25vw"
-                            style={{ objectFit: 'cover' }}
-                          />
-                        </div>
-                        <Card.Body>
-                          <Card.Title style={{ fontSize: '0.9rem' }}>
-                            {movie.translated_title || movie.title}
-                          </Card.Title>
-                          <Card.Text>
-                            <small className="text-muted">{movie.id}</small>
-                            <br />
-                            <small className="text-muted">{movie.date}</small>
-                          </Card.Text>
-                        </Card.Body>
-                      </Card>
-                    </Link>
-                  </Col>
-                ))
-              ) : (
-                <Col>
-                  <p>没有找到该演员的相关作品</p>
-                </Col>
-              )}
-            </Row>
+        {error && (
+          <div className="alert alert-danger" role="alert">
+            {error}
           </div>
         )}
+        
+        {!loading && (
+          <>
+            {renderMovieDetails()}
+            {renderKeywordResults()}
+            {renderActorResults()}
+          </>
+        )}
+        
+        {renderDebugInfo()}
       </Container>
     </Layout>
+  );
+}
+
+// Main component with Suspense boundary
+export default function Search() {
+  return (
+    <Suspense fallback={
+      <Layout>
+        <Container className="py-4">
+          <div className="text-center my-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">加载中...</span>
+            </div>
+            <p className="mt-2">正在加载搜索页面...</p>
+          </div>
+        </Container>
+      </Layout>
+    }>
+      <SearchContent />
+    </Suspense>
   );
 } 

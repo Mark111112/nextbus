@@ -14,6 +14,16 @@ export interface Movie {
   is_favorite?: boolean;
   gid?: string;
   uc?: string;
+  // TMDB specific fields
+  poster_path?: string;
+  release_date?: string;
+  overview?: string;
+  credits?: {
+    cast?: Array<{
+      id: string;
+      name: string;
+    }>;
+  };
 }
 
 export interface Actor {
@@ -26,6 +36,9 @@ export interface Actor {
   measurements?: string;
   birthplace?: string;
   hobby?: string;
+  // TMDB specific fields
+  profile_path?: string;
+  biography?: string;
 }
 
 export interface MagnetLink {
