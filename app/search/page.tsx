@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Container, Row, Col, Form, Button, Card, Pagination, InputGroup } from 'react-bootstrap';
 import Layout from '../../components/Layout';
@@ -9,7 +9,8 @@ import { Movie, PaginationInfo } from '../../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
 
-export default function Search() {
+// Create a separate component for the search functionality
+function SearchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -205,5 +206,22 @@ export default function Search() {
         )}
       </Container>
     </Layout>
+  );
+}
+
+// Main component with Suspense boundary
+export default function Search() {
+  return (
+    <Suspense fallback={
+      <Layout>
+        <Container>
+          <div className="text-center my-5">
+            <p>正在加载搜索页面...</p>
+          </div>
+        </Container>
+      </Layout>
+    }>
+      <SearchContent />
+    </Suspense>
   );
 } 
