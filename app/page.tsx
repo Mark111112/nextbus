@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Card, Button, Form, InputGroup } from 'react-bootstrap';
 import Layout from '../components/Layout';
-import { getMovieData, testApiConnection } from '../lib/api';
+import { getMovieData } from '../lib/api';
 import { Movie } from '../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -13,29 +13,13 @@ export default function Home() {
   const router = useRouter();
   const [recentMovies, setRecentMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
-  const [apiTestResult, setApiTestResult] = useState<string>('');
-  const [apiTestStatus, setApiTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  
+  // Search parameters
   const [searchQuery, setSearchQuery] = useState('');
-
-  // 测试API连接
-  const handleTestApiConnection = async () => {
-    setApiTestStatus('loading');
-    setApiTestResult('正在测试API连接...');
-    
-    try {
-      const result = await testApiConnection();
-      if (result.success) {
-        setApiTestStatus('success');
-        setApiTestResult(`API连接成功: ${result.message}`);
-      } else {
-        setApiTestStatus('error');
-        setApiTestResult(`API连接失败: ${result.message}`);
-      }
-    } catch (error) {
-      setApiTestStatus('error');
-      setApiTestResult(`API测试出错: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
+  const [includeMagnetless, setIncludeMagnetless] = useState(false);
+  const [uncensoredOnly, setUncensoredOnly] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<string>('');
+  const [selectedFilterValue, setSelectedFilterValue] = useState<string>('');
 
   // Load recent movies from local storage on client side
   useEffect(() => {
@@ -67,41 +51,105 @@ export default function Home() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Build search parameters
+    const params = new URLSearchParams();
+    
     if (searchQuery.trim()) {
-      // If search query is not empty, use the search endpoint
-      router.push(`/search?keyword=${encodeURIComponent(searchQuery.trim())}`);
-    } else {
-      // If search query is empty, use the movies endpoint
-      router.push('/search');
+      params.set('keyword', searchQuery.trim());
     }
+    
+    // Add filter parameters if selected
+    if (selectedFilter && selectedFilterValue) {
+      params.set('filterType', selectedFilter);
+      params.set('filterValue', selectedFilterValue);
+    }
+    
+    // Add magnet parameter if including magnetless movies
+    if (includeMagnetless) {
+      params.set('magnet', 'all');
+    }
+    
+    // Add type parameter if uncensored only
+    if (uncensoredOnly) {
+      params.set('type', 'uncensored');
+    }
+    
+    // Navigate to search page with parameters
+    router.push(`/search${params.toString() ? `?${params.toString()}` : ''}`);
   };
 
   return (
     <Layout>
       <Container>
-        <h1 className="mb-4">NextBus</h1>
-        <p className="lead mb-3">使用 Next.js 构建的 JavBus 浏览器</p>
-        
-        {/* API测试区域 */}
-        <div className="mb-4 p-3 border rounded">
-          <h5>API 连接测试</h5>
-          <div className="d-flex align-items-center mb-2">
-            <Button 
-              variant="outline-primary" 
-              onClick={handleTestApiConnection}
-              disabled={apiTestStatus === 'loading'}
-              className="me-3"
-            >
-              {apiTestStatus === 'loading' ? '测试中...' : '测试 API 连接'}
-            </Button>
-            
-            {apiTestResult && (
-              <div className={`${apiTestStatus === 'success' ? 'text-success' : apiTestStatus === 'error' ? 'text-danger' : ''}`}>
-                {apiTestResult}
-              </div>
-            )}
+        {/* Search section at the top */}
+        <div className="card mb-4">
+          <div className="card-header bg-primary text-white">
+            <h3 className="m-0">关键字搜索</h3>
           </div>
-          <small className="text-muted">如果搜索不到结果，可先测试API连接是否正常</small>
+          <div className="card-body">
+            <Form onSubmit={handleSearch}>
+              <InputGroup className="mb-3">
+                <Form.Control
+                  placeholder="输入关键词或留空显示全部影片"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="搜索"
+                />
+                <Button variant="primary" type="submit">
+                  Search
+                </Button>
+              </InputGroup>
+              
+              <div className="d-flex flex-wrap align-items-center mb-3">
+                <Form.Check 
+                  type="checkbox" 
+                  id="includeMagnetless"
+                  label="包含无磁力影片" 
+                  className="me-4"
+                  checked={includeMagnetless}
+                  onChange={(e) => setIncludeMagnetless(e.target.checked)}
+                />
+                
+                <Form.Check 
+                  type="checkbox" 
+                  id="uncensoredOnly"
+                  label="无码影片" 
+                  className="me-4"
+                  checked={uncensoredOnly}
+                  onChange={(e) => setUncensoredOnly(e.target.checked)}
+                />
+              </div>
+              
+              <div>
+                <h6 className="mb-2">高级筛选 (留空则不启用):</h6>
+                <Row>
+                  <Col xs={12} md={6} className="mb-2">
+                    <Form.Select 
+                      value={selectedFilter}
+                      onChange={(e) => setSelectedFilter(e.target.value)}
+                      aria-label="选择筛选类型"
+                    >
+                      <option value="">选择筛选类型...</option>
+                      <option value="star">演员</option>
+                      <option value="genre">类别</option>
+                      <option value="director">导演</option>
+                      <option value="studio">制作商</option>
+                      <option value="label">发行商</option>
+                      <option value="series">系列</option>
+                    </Form.Select>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Form.Control
+                      placeholder="输入筛选ID值"
+                      value={selectedFilterValue}
+                      onChange={(e) => setSelectedFilterValue(e.target.value)}
+                      disabled={!selectedFilter}
+                    />
+                  </Col>
+                </Row>
+              </div>
+            </Form>
+          </div>
         </div>
         
         {/* Recent movies section */}
@@ -145,27 +193,6 @@ export default function Home() {
             </Col>
           )}
         </Row>
-        
-        {/* Search section */}
-        <div className="search-container p-5 bg-light rounded">
-          <h2 className="mb-3">影片搜索</h2>
-          <Form onSubmit={handleSearch}>
-            <InputGroup className="mb-3">
-              <Form.Control
-                placeholder="输入影片关键词、ID等..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="搜索"
-              />
-              <Button variant="primary" type="submit">
-                搜索
-              </Button>
-            </InputGroup>
-            <small className="text-muted">
-              提示: 留空搜索将显示所有最新影片
-            </small>
-          </Form>
-        </div>
       </Container>
     </Layout>
   );

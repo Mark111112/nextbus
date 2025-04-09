@@ -5,6 +5,36 @@ export interface Movie {
   image_url: string;
   date: string;
   producer?: string;
+  publisher?: string;
+  director?: string;
+  series?: string;
+  // New structured entity fields with URLs
+  director_obj?: {
+    id: string;
+    name: string;
+    url: string;
+  };
+  producer_obj?: {
+    id: string;
+    name: string;
+    url: string;
+  };
+  publisher_obj?: {
+    id: string;
+    name: string;
+    url: string;
+  };
+  series_obj?: {
+    id: string;
+    name: string;
+    url: string;
+  };
+  genres_obj?: Array<{
+    id: string;
+    name: string;
+    url: string;
+  }>;
+  videoLength?: string;
   summary?: string;
   translated_summary?: string;
   genres?: string[];
@@ -30,6 +60,7 @@ export interface Actor {
   id: string;
   name: string;
   image_url: string;
+  url?: string; // Add URL field for filtering by actor
   birthdate?: string;
   age?: string;
   height?: string;

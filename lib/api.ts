@@ -133,6 +133,7 @@ export const searchMovies = async (
       const data = response.data;
       const movies = data.movies || [];
       const pagination = data.pagination || {};
+      const filter = data.filter || null;
       
       // Format movie data
       const formattedMovies = movies.map((movie: any) => ({
@@ -152,14 +153,15 @@ export const searchMovies = async (
           has_next: pagination.hasNextPage || false,
           next_page: pagination.nextPage || 1,
           pages: pagination.pages || []
-        }
+        },
+        filter: filter
       };
     }
     
-    return { movies: [], pagination: {} };
+    return { movies: [], pagination: {}, filter: null };
   } catch (error) {
     console.error('Search movies error:', error);
-    return { movies: [], pagination: {} };
+    return { movies: [], pagination: {}, filter: null };
   }
 };
 
@@ -348,16 +350,75 @@ export const getMovieSummary = async (movieId: string) => {
 
 // Helper function to format movie data
 export const formatMovieData = (movieData: any): Movie => {
+  // Helper to safely get a string from an object or string
+  const getStringValue = (value: any): string => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null) {
+      if ('name' in value) return value.name;
+      if ('id' in value) return String(value.id);
+    }
+    return String(value);
+  };
+
+  // Helper to create filter URL for entities
+  const createFilterUrl = (type: string, id: string): string => {
+    if (!id) return '';
+    return `/api/movies?filterType=${type}&filterValue=${id}`;
+  };
+
+  // Format filter entity objects with URL
+  const formatFilterEntity = (entity: any, type: string): any => {
+    if (!entity) return null;
+    
+    // If entity is already an object with id and name
+    if (typeof entity === 'object' && entity !== null) {
+      return {
+        id: entity.id || '',
+        name: entity.name || '',
+        url: createFilterUrl(type, entity.id || '')
+      };
+    }
+    
+    // If entity is just a string (name only, no id)
+    return {
+      name: String(entity),
+      id: '', // No ID available
+      url: '' // Can't create URL without ID
+    };
+  };
+
+  // Extract structured data for entities that may be strings or objects
+  const directorData = typeof movieData.director === 'object' ? movieData.director : { id: '', name: movieData.director || '' };
+  const producerData = typeof movieData.producer === 'object' ? movieData.producer : 
+                      (typeof movieData.publisher === 'object' ? movieData.publisher : { id: '', name: movieData.producer || movieData.publisher || '' });
+  const publisherData = typeof movieData.publisher === 'object' ? movieData.publisher : 
+                       (typeof movieData.distributor === 'object' ? movieData.distributor : { id: '', name: movieData.publisher || movieData.distributor || '' });
+  const seriesData = typeof movieData.series === 'object' ? movieData.series : { id: '', name: movieData.series || '' };
+
   const formattedMovie: Movie = {
     id: movieData.id || '',
     title: movieData.title || '',
     translated_title: movieData.translated_title || '',
     image_url: movieData.img || '',
     date: movieData.date || '',
-    producer: movieData.publisher?.name || movieData.publisher || '',
+    producer: getStringValue(movieData.publisher || movieData.producer),
+    publisher: getStringValue(movieData.distributor),
+    director: getStringValue(movieData.director),
+    series: getStringValue(movieData.series),
+    // Add structured entity objects with filter URLs
+    director_obj: formatFilterEntity(directorData, 'director'),
+    producer_obj: formatFilterEntity(producerData, 'studio'),
+    publisher_obj: formatFilterEntity(publisherData, 'label'),
+    series_obj: formatFilterEntity(seriesData, 'series'),
+    videoLength: movieData.length || movieData.duration || '',
     summary: movieData.description || '',
     translated_summary: movieData.translated_description || '',
-    genres: (movieData.genres || []).map((genre: any) => genre.name || ''),
+    genres: (movieData.genres || []).map((genre: any) => 
+      typeof genre === 'object' && genre !== null ? genre.name || '' : String(genre)),
+    // Add structured genres with filter URLs  
+    genres_obj: (movieData.genres || []).map((genre: any) => 
+      formatFilterEntity(genre, 'genre')),
     actors: [],
     magnet_links: [],
     sample_images: [],
@@ -370,7 +431,8 @@ export const formatMovieData = (movieData: any): Movie => {
     formattedMovie.actors = movieData.stars.map((actor: any) => ({
       id: actor.id || '',
       name: actor.name || '',
-      image_url: actor.avatar || ''
+      image_url: actor.avatar || '',
+      url: createFilterUrl('star', actor.id || '') // Add filter URL for actors
     }));
   }
 

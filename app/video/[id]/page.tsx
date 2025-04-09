@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Card, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Card, Alert, Button } from 'react-bootstrap';
 import Layout from '../../../components/Layout';
 import { getMovieData, getWatchUrlPrefix } from '../../../lib/api';
 import { Movie } from '../../../lib/types';
@@ -23,6 +23,7 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
   const [hlsUrl, setHlsUrl] = useState('');
   const [magnetLink, setMagnetLink] = useState('');
   const [playerError, setPlayerError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
   
   // Refs
   const playerRef = useRef<any>(null);
@@ -39,21 +40,19 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
         if (movieData) {
           setMovie(movieData);
           
-          // Try to setup HLS URL
-          try {
-            // In Next.js, we'll use our proxy endpoint for HLS streams
-            // This would normally require backend parsing but for demo we use static URL
-            setHlsUrl(`/api/proxy?url=${encodeURIComponent(`${getWatchUrlPrefix()}/${movieId}/playlist.m3u8`)}`);
-          } catch (error) {
-            console.error('Failed to set HLS URL:', error);
-          }
+          // Setup HLS URL using our proxy
+          setHlsUrl(`/api/video-proxy/${movieId}/index.m3u8`);
           
           // Set direct URL as fallback
           setVideoUrl(`${getWatchUrlPrefix()}/${movieId}`);
           
           // Set magnet link as another fallback
           if (movieData.magnet_links && movieData.magnet_links.length > 0) {
-            setMagnetLink(movieData.magnet_links[0].link);
+            // Find the best magnet link (HD with subtitles if available)
+            const bestMagnet = movieData.magnet_links.find(m => m.is_hd && m.has_subtitle) || 
+                               movieData.magnet_links.find(m => m.is_hd) || 
+                               movieData.magnet_links[0];
+            setMagnetLink(bestMagnet.link);
           }
         } else {
           setError(`电影 ${movieId} 不存在`);
@@ -72,7 +71,23 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
   // Handle player error
   const handlePlayerError = (error: any) => {
     console.error('Player error:', error);
-    setPlayerError('视频播放失败，请尝试直接访问原站或使用磁力链接');
+    setPlayerError('视频播放失败，请尝试重试或直接访问原站播放');
+  };
+  
+  // Handle retry
+  const handleRetry = () => {
+    setPlayerError('');
+    setRetryCount(prev => prev + 1);
+    
+    // Attempt to use a different URL format
+    if (retryCount === 0) {
+      setHlsUrl(`/api/video-proxy/${movieId}/playlist.m3u8`);
+    } else if (retryCount === 1) {
+      setHlsUrl(`/api/video-proxy/${movieId}/master.m3u8`);
+    } else {
+      // Try direct URL
+      window.open(videoUrl, '_blank');
+    }
   };
   
   if (loading) {
@@ -118,12 +133,30 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
                 {playerError && (
                   <Alert variant="warning" className="mb-3">
                     {playerError}
+                    <div className="mt-2 d-flex gap-2">
+                      <Button 
+                        variant="outline-primary" 
+                        size="sm"
+                        onClick={handleRetry}
+                      >
+                        重试播放
+                      </Button>
+                      <a 
+                        href={videoUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="btn btn-sm btn-outline-info"
+                      >
+                        前往原站播放
+                      </a>
+                    </div>
                   </Alert>
                 )}
                 
                 <div className="ratio ratio-16x9 mb-3">
                   {hlsUrl ? (
                     <ReactPlayer
+                      key={`player-${retryCount}`} // Force re-render on retry
                       ref={playerRef}
                       url={hlsUrl}
                       controls={true}
@@ -134,10 +167,21 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
                         file: {
                           forceHLS: true,
                           hlsOptions: {
+                            xhrSetup: function(xhr: XMLHttpRequest) {
+                              xhr.withCredentials = false;
+                            },
+                            maxLoadingDelay: 4,
+                            maxMaxBufferLength: 60,
+                            liveSyncDuration: 3,
+                            levelLoadingTimeOut: 10000,
+                            manifestLoadingTimeOut: 10000,
+                            fragLoadingTimeOut: 20000,
+                            enableWorker: true,
                             debug: false
                           }
                         }
                       }}
+                      playing={true}
                     />
                   ) : (
                     <div className="d-flex align-items-center justify-content-center bg-dark text-white">
@@ -147,16 +191,14 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
                 </div>
                 
                 <div className="d-flex flex-wrap gap-2">
-                  {videoUrl && (
-                    <a 
-                      href={videoUrl}
-                      className="btn btn-primary" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                    >
-                      前往原站观看
-                    </a>
-                  )}
+                  <a 
+                    href={videoUrl}
+                    className="btn btn-primary" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
+                    前往原站观看
+                  </a>
                   
                   {magnetLink && (
                     <a 
@@ -185,7 +227,7 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
             <Card>
               <div className="position-relative" style={{ height: '320px' }}>
                 <Image
-                  src={movie.image_url || '/placeholder.jpg'}
+                  src={`/api/images/${movie.id}/cover.jpg`}
                   alt={movie.title}
                   fill
                   sizes="(max-width: 992px) 100vw, 33vw"
@@ -212,7 +254,7 @@ export default function VideoPlayer({ params }: { params: { id: string } }) {
                       {movie.actors.map((actor) => (
                         <Link
                           key={actor.id}
-                          href={`/search?type=actor&name=${encodeURIComponent(actor.name)}`}
+                          href={`/search?keyword=${encodeURIComponent(actor.name)}`}
                           className="badge bg-info text-decoration-none"
                         >
                           {actor.name}
