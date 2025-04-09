@@ -1,18 +1,21 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Button } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Form, InputGroup } from 'react-bootstrap';
 import Layout from '../components/Layout';
 import { getMovieData, testApiConnection } from '../lib/api';
 import { Movie } from '../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const router = useRouter();
   const [recentMovies, setRecentMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [apiTestResult, setApiTestResult] = useState<string>('');
   const [apiTestStatus, setApiTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // 测试API连接
   const handleTestApiConnection = async () => {
@@ -61,6 +64,18 @@ export default function Home() {
     }
   }, []);
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (searchQuery.trim()) {
+      // If search query is not empty, use the search endpoint
+      router.push(`/search?keyword=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      // If search query is empty, use the movies endpoint
+      router.push('/search');
+    }
+  };
+
   return (
     <Layout>
       <Container>
@@ -103,7 +118,7 @@ export default function Home() {
                   <Card className="h-100 movie-card">
                     <div style={{ position: 'relative', height: '280px' }}>
                       <Image
-                        src={movie.image_url || '/placeholder.jpg'}
+                        src={movie.id ? `/api/images/${movie.id}/cover.jpg` : '/placeholder.jpg'}
                         alt={movie.title}
                         fill
                         sizes="(max-width: 576px) 100vw, (max-width: 992px) 50vw, 25vw"
@@ -132,41 +147,24 @@ export default function Home() {
         </Row>
         
         {/* Search section */}
-        <div className="mt-5 p-5 bg-light rounded">
-          <h2 className="mb-3">搜索电影</h2>
-          <p>通过以下方式找到您想要的电影：</p>
-          <Row className="mt-4">
-            <Col md={4}>
-              <Link href="/search" passHref className="text-decoration-none">
-                <Card className="mb-3 h-100">
-                  <Card.Body className="text-center">
-                    <h3>ID 搜索</h3>
-                    <p>使用电影 ID 精确搜索</p>
-                  </Card.Body>
-                </Card>
-              </Link>
-            </Col>
-            <Col md={4}>
-              <Link href="/search?type=keyword" passHref className="text-decoration-none">
-                <Card className="mb-3 h-100">
-                  <Card.Body className="text-center">
-                    <h3>关键字搜索</h3>
-                    <p>使用关键字搜索电影</p>
-                  </Card.Body>
-                </Card>
-              </Link>
-            </Col>
-            <Col md={4}>
-              <Link href="/search?type=actor" passHref className="text-decoration-none">
-                <Card className="mb-3 h-100">
-                  <Card.Body className="text-center">
-                    <h3>演员搜索</h3>
-                    <p>按演员姓名搜索电影</p>
-                  </Card.Body>
-                </Card>
-              </Link>
-            </Col>
-          </Row>
+        <div className="search-container p-5 bg-light rounded">
+          <h2 className="mb-3">影片搜索</h2>
+          <Form onSubmit={handleSearch}>
+            <InputGroup className="mb-3">
+              <Form.Control
+                placeholder="输入影片关键词、ID等..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="搜索"
+              />
+              <Button variant="primary" type="submit">
+                搜索
+              </Button>
+            </InputGroup>
+            <small className="text-muted">
+              提示: 留空搜索将显示所有最新影片
+            </small>
+          </Form>
         </div>
       </Container>
     </Layout>

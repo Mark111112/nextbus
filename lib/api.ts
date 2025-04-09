@@ -99,22 +99,27 @@ export const getMovieData = async (movieId: string): Promise<Movie | null> => {
 export const searchMovies = async (
   keyword: string, 
   page: number = 1, 
-  magnet: string = '', 
-  type: string = '',
+  magnet: string = 'exist', 
+  type: string = 'normal',
   filterType: string = '',
   filterValue: string = ''
 ) => {
   try {
     // Build query parameters
     const params: Record<string, string | number> = { page };
-    if (keyword) params.keyword = keyword;
     if (magnet) params.magnet = magnet;
     if (type) params.type = type;
     if (filterType) params.filterType = filterType;
     if (filterValue) params.filterValue = filterValue;
     
-    // Determine which endpoint to use
+    // Determine which endpoint to use based on keyword presence
     const endpoint = keyword ? 'movies/search' : 'movies';
+    
+    // Add keyword to params only if it's present and we're using the search endpoint
+    if (keyword) {
+      params.keyword = keyword;
+    }
+    
     console.log(`[API] 搜索电影: endpoint=${endpoint}, params=`, params);
     
     // 使用代理或直接请求
@@ -245,7 +250,8 @@ export const getMagnetLinks = async (movieId: string, gid?: string, uc?: string)
     if (gid) params.gid = gid;
     if (uc) params.uc = uc;
     
-    const response = await axios.get(`${API_URL}/magnets/${movieId}`, { params });
+    // Use our proxy endpoint instead of directly calling the API
+    const response = await axios.get(`/api/magnets/${movieId}`, { params });
     
     if (response.status === 200) {
       const magnets = response.data || [];
@@ -307,18 +313,36 @@ export const translateText = async (
 // Get movie summary from FANZA
 export const getMovieSummary = async (movieId: string) => {
   try {
-    const response = await axios.get(`/api/movie-summary/${movieId}`);
+    const response = await axios.get(`/api/movie-summary/${movieId}`, {
+      // Add a timeout to avoid long waits
+      timeout: 10000,
+      // Only try once to avoid browser console spam
+      validateStatus: (status) => status < 500
+    });
     
-    if (response.status === 200) {
+    if (response.status === 200 && response.data.summary) {
       return {
         summary: response.data.summary || '',
-        translated_summary: response.data.translated_summary || ''
+        translated_summary: response.data.translated_summary || '',
+        available: true
       };
     }
-    return { summary: '', translated_summary: '' };
+    
+    // If we got a 404 or any other status, clearly indicate summary is not available
+    console.log(`Summary not available for ${movieId}: ${response.status}`);
+    return { 
+      summary: '', 
+      translated_summary: '', 
+      available: false 
+    };
   } catch (error) {
     console.error(`Failed to get summary for ${movieId}:`, error);
-    return { summary: '', translated_summary: '' };
+    // Clearly indicate summary is not available to prevent further attempts
+    return { 
+      summary: '', 
+      translated_summary: '', 
+      available: false 
+    };
   }
 };
 

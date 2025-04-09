@@ -29,6 +29,9 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summary, setSummary] = useState('');
   
+  // Additional state to track if summary is available
+  const [summaryAvailable, setSummaryAvailable] = useState<boolean | null>(null);
+  
   // Magnets state
   const [magnets, setMagnets] = useState<MagnetLink[]>([]);
   const [loadingMagnets, setLoadingMagnets] = useState(false);
@@ -93,7 +96,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
   
   // Get movie summary if none exists
   useEffect(() => {
-    if (movie && !movie.summary && !loadingSummary && !summary) {
+    if (movie && !movie.summary && !loadingSummary && summary === '' && summaryAvailable !== false) {
       const fetchSummary = async () => {
         setLoadingSummary(true);
         
@@ -103,8 +106,13 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
           if (summaryData && summaryData.summary) {
             setSummary(summaryData.summary);
           }
+          
+          // Set the availability flag to prevent further attempts
+          setSummaryAvailable(summaryData.available);
         } catch (error) {
           console.error('Failed to load summary:', error);
+          // Mark as unavailable to prevent further attempts
+          setSummaryAvailable(false);
         } finally {
           setLoadingSummary(false);
         }
@@ -112,7 +120,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
       
       fetchSummary();
     }
-  }, [movie, movieId, loadingSummary, summary]);
+  }, [movie, movieId, loadingSummary, summary, summaryAvailable]);
   
   // Fetch magnet links
   const fetchMagnets = async (gid?: string, uc?: string) => {
@@ -254,7 +262,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
           <Col md={3} className="mb-4">
             <div className="position-relative" style={{ height: '400px' }}>
               <Image
-                src={movie.image_url || '/placeholder.jpg'}
+                src={`/api/images/${movie.id}/cover.jpg`}
                 alt={movie.title}
                 fill
                 sizes="(max-width: 768px) 100vw, 33vw"
@@ -362,6 +370,8 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
                         </Button>
                       )}
                     </>
+                  ) : summaryAvailable === false ? (
+                    <p>无法获取影片简介</p>
                   ) : (
                     <p>暂无简介</p>
                   )}

@@ -12,7 +12,9 @@ const AppNavbar: React.FC = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      router.push(`/search?id=${encodeURIComponent(searchQuery.trim())}`);
+      router.push(`/search?keyword=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      router.push('/search');
     }
   };
 
@@ -38,7 +40,7 @@ const AppNavbar: React.FC = () => {
           <Form className="d-flex" onSubmit={handleSearch}>
             <Form.Control
               type="search"
-              placeholder="输入影片ID..."
+              placeholder="输入关键词搜索..."
               className="me-2"
               aria-label="Search"
               value={searchQuery}
