@@ -307,6 +307,163 @@ const getSummaryFromMeta = (html: string): string | null => {
   }
 };
 
+// Helper function to check if a redirect is age verification
+const isAgeVerificationRedirect = (url: string): boolean => {
+  return url.includes('/age_check/') || 
+         url.includes('/age_confirmation/') || 
+         url.includes('/notice/') ||
+         url.includes('confirm?');
+};
+
+// Function to check if content is from an age verification page rather than movie content
+const isAgeVerificationContent = (html: string): boolean => {
+  // Check for common content in the age verification page
+  return html.includes('日本を代表するアダルトポータルへようこそ') || 
+         html.includes('あなたは18歳以上ですか') || 
+         html.includes('age_check') || 
+         html.includes('年齢確認');
+};
+
+// Function to handle age verification and proceed to target URL
+const bypassAgeVerification = async (targetUrl: string): Promise<{data: string, finalUrl: string} | null> => {
+  try {
+    console.log(`Attempting to bypass age verification for: ${targetUrl}`);
+    
+    // Enhanced age verification cookies
+    const cookies = [
+      'age_check_done=1',
+      'cklg=ja',          // Language setting
+      'uid=apt',          // User identifier
+      'adultchecked=1',   // Additional age check
+      'check_done=1',     // Another variation
+      'digital_check=true', // Digital content check
+      'declared=yes'      // Explicitly declared age
+    ].join('; ');
+    
+    // Set up headers to mimic a browser
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Cookie': cookies,
+      'Referer': 'https://www.dmm.co.jp/',
+    };
+    
+    // Instead of following redirects, we'll handle them manually to properly process age verification
+    const axiosConfig = {
+      headers,
+      timeout: 10000,
+      maxRedirects: 0, // Don't follow redirects automatically
+      validateStatus: (status: number) => status >= 200 && status < 500, // Accept all responses except server errors
+    };
+    
+    // First attempt - direct request with age verification cookies
+    let response = await axios.get(targetUrl, axiosConfig);
+    
+    // If we get a redirect to age verification page
+    if (response.status >= 300 && response.status < 400 && response.headers.location) {
+      const redirectUrl = new URL(response.headers.location, targetUrl).toString();
+      console.log(`Redirected to: ${redirectUrl}`);
+      
+      // If it's an age verification redirect
+      if (isAgeVerificationRedirect(redirectUrl)) {
+        console.log('Handling age verification redirect');
+        
+        // Extract the rurl parameter if available (target URL after verification)
+        let targetAfterVerification = targetUrl;
+        try {
+          const urlObj = new URL(redirectUrl);
+          const rurl = urlObj.searchParams.get('rurl');
+          if (rurl) {
+            targetAfterVerification = decodeURIComponent(rurl);
+            console.log(`Found target URL in rurl: ${targetAfterVerification}`);
+          }
+        } catch (e) {
+          console.error('Error parsing redirect URL:', e);
+        }
+        
+        // Make a POST request to the age verification page as if the user clicked "I Agree"
+        const verificationResponse = await axios.post(redirectUrl, 
+          'confirmed=yes&age_check_done=1', // Form data to simulate clicking "I Agree"
+          {
+            ...axiosConfig,
+            headers: {
+              ...headers,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Cookie': cookies + '; age_check_done=1; declared=yes;',
+            }
+          }
+        );
+        
+        // Check if we were redirected to the target page
+        if (verificationResponse.status >= 300 && verificationResponse.status < 400 && 
+            verificationResponse.headers.location) {
+          const finalRedirectUrl = new URL(
+            verificationResponse.headers.location, 
+            redirectUrl
+          ).toString();
+          
+          console.log(`Post-verification redirect to: ${finalRedirectUrl}`);
+          
+          // Follow the final redirect
+          const finalResponse = await axios.get(finalRedirectUrl, {
+            ...axiosConfig,
+            headers: {
+              ...headers, 
+              'Cookie': cookies + '; age_check_done=1; declared=yes;',
+            },
+            maxRedirects: 5 // Allow some redirects for this final request
+          });
+          
+          if (isAgeVerificationContent(finalResponse.data)) {
+            console.log('Still getting age verification page after POST request');
+            return null;
+          }
+          
+          return {data: finalResponse.data, finalUrl: finalRedirectUrl};
+        }
+        
+        // If we get HTML content directly after POST (some sites work this way)
+        if (verificationResponse.status === 200 && !isAgeVerificationContent(verificationResponse.data)) {
+          return {data: verificationResponse.data, finalUrl: redirectUrl};
+        }
+        
+        // Last resort - try to directly request the target URL again but with enhanced cookies
+        console.log('Trying direct request to target URL with enhanced cookies');
+        const enhancedResponse = await axios.get(targetAfterVerification, {
+          ...axiosConfig,
+          headers: {
+            ...headers,
+            'Cookie': cookies + '; age_check_done=1; declared=yes; is_already_checked=1;',
+          },
+          maxRedirects: 5 // Allow redirects for this final attempt
+        });
+        
+        if (!isAgeVerificationContent(enhancedResponse.data)) {
+          return {data: enhancedResponse.data, finalUrl: targetAfterVerification};
+        }
+      }
+      
+      // Handle non-age verification redirect
+      response = await axios.get(redirectUrl, {
+        ...axiosConfig,
+        maxRedirects: 5 // Allow redirects for non-age verification redirects
+      });
+    }
+    
+    // Check if the result is still an age verification page
+    if (isAgeVerificationContent(response.data)) {
+      console.log('Still on age verification page after attempts');
+      return null;
+    }
+    
+    return {data: response.data, finalUrl: response.request?.responseURL || targetUrl};
+  } catch (error) {
+    console.error(`Error bypassing age verification: ${error}`);
+    return null;
+  }
+};
+
 // Function to get movie summary from FANZA - completely rewritten based on movieinfo.py
 const getMovieSummary = async (movieId: string) => {
   // Check if this is a compatible ID format
@@ -319,134 +476,48 @@ const getMovieSummary = async (movieId: string) => {
   const urls = getUrlsById(movieId);
   console.log(`Generated ${urls.length} URLs to try for ${movieId}`);
   
-  // Enhanced age verification cookies
-  const cookies = [
-    'age_check_done=1',
-    'cklg=ja',  // Language setting
-    'uid=apt',  // User identifier
-    'adultchecked=1', // Additional age check
-    'check_done=1', // Another variation
-    'digital_check=true' // Digital content check
-  ].join('; ');
-  
-  // Set up headers to mimic a browser
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Cookie': cookies,
-    'Referer': 'https://www.dmm.co.jp/',
-  };
-  
-  // Axios config with enhanced settings
-  const axiosConfig = {
-    headers,
-    timeout: 10000,
-    maxRedirects: 5, // Allow following redirects
-    validateStatus: (status: number) => status >= 200 && status < 500, // Accept all responses except server errors
-  };
-  
-  // Helper function to check if a redirect is age verification
-  const isAgeVerificationRedirect = (url: string): boolean => {
-    return url.includes('/age_check/') || 
-           url.includes('/age_confirmation/') || 
-           url.includes('/notice/') ||
-           url.includes('confirm?');
-  };
-  
-  // First try to get past age verification if needed
-  try {
-    const initialResponse = await axios.get('https://www.dmm.co.jp/', axiosConfig);
-    
-    // If we're redirected to age verification, handle it
-    if (initialResponse.request?.responseURL && 
-        isAgeVerificationRedirect(initialResponse.request.responseURL)) {
-      console.log('Handling age verification redirect');
-      
-      // Try to get past age verification by directly requesting the verification URL with proper cookies
-      const verificationUrl = initialResponse.request.responseURL;
-      await axios.get(verificationUrl, {
-        ...axiosConfig,
-        headers: {
-          ...headers,
-          'Cookie': cookies + '; age_check_done=1',
-        }
-      });
-    }
-  } catch (error) {
-    console.log('Initial age verification attempt failed, continuing with direct requests');
-  }
-  
   // Try each URL in sequence
   for (const url of urls) {
     console.log(`Trying URL: ${url}`);
     try {
-      // Send request with timeout and cookies
-      const response = await axios.get(url, axiosConfig);
+      // Use the enhanced bypass function instead of direct axios call
+      const result = await bypassAgeVerification(url);
       
-      // Check for region restriction
-      if (response.request?.responseURL?.includes('not-available-in-your-region')) {
-        console.log('Region restricted content');
+      if (!result) {
+        console.log(`Failed to bypass age verification for ${url}`);
         continue;
       }
       
-      // Check if we were redirected to age verification
-      if (response.request?.responseURL && 
-          isAgeVerificationRedirect(response.request.responseURL)) {
-        console.log('Redirected to age verification page, trying to bypass...');
-        
-        // Try to make a direct request to the age verification endpoint with proper cookies
-        const verificationUrl = response.request.responseURL;
-        const verificationResponse = await axios.get(verificationUrl, {
-          ...axiosConfig,
-          headers: {
-            ...headers,
-            'Cookie': cookies + '; age_check_done=1',
-          }
-        });
-        
-        // After verification attempt, retry the original URL
-        const retryResponse = await axios.get(url, axiosConfig);
-        
-        // If still redirected to verification, continue to next URL
-        if (retryResponse.request?.responseURL && 
-            isAgeVerificationRedirect(retryResponse.request.responseURL)) {
-          console.log('Still redirected to age verification, skipping URL');
-          continue;
-        }
-        
-        // Use the retry response data
-        response.data = retryResponse.data;
-      }
+      const {data, finalUrl} = result;
       
       // Extract summary using various methods
-      let summary = getSummaryFromJsonLd(response.data);
+      let summary = getSummaryFromJsonLd(data);
       if (summary) {
         return {
           summary,
           source: 'json-ld',
-          url,
-          fanza_id: url.match(/cid=([^/&]+)/)?.[1] || ''
+          url: finalUrl,
+          fanza_id: finalUrl.match(/cid=([^/&]+)/)?.[1] || ''
         };
       }
       
-      summary = getSummaryFromHtml(response.data);
+      summary = getSummaryFromHtml(data);
       if (summary) {
         return {
           summary,
           source: 'html',
-          url,
-          fanza_id: url.match(/cid=([^/&]+)/)?.[1] || ''
+          url: finalUrl,
+          fanza_id: finalUrl.match(/cid=([^/&]+)/)?.[1] || ''
         };
       }
       
-      summary = getSummaryFromMeta(response.data);
+      summary = getSummaryFromMeta(data);
       if (summary) {
         return {
           summary,
           source: 'meta',
-          url,
-          fanza_id: url.match(/cid=([^/&]+)/)?.[1] || ''
+          url: finalUrl,
+          fanza_id: finalUrl.match(/cid=([^/&]+)/)?.[1] || ''
         };
       }
       
@@ -464,61 +535,42 @@ const getMovieSummary = async (movieId: string) => {
     const url = `https://www.dmm.co.jp/mono/dvd/-/detail/=/cid=${originalId}/`;
     
     try {
-      const response = await axios.get(url, axiosConfig);
+      const result = await bypassAgeVerification(url);
       
-      // Check for region restriction
-      if (response.request?.responseURL?.includes('not-available-in-your-region')) {
-        console.log('Region restricted content');
+      if (!result) {
+        console.log(`Failed to bypass age verification for ${url}`);
         return null;
       }
       
-      // Check if we were redirected to age verification
-      if (response.request?.responseURL && 
-          isAgeVerificationRedirect(response.request.responseURL)) {
-        console.log('Redirected to age verification page with original ID, trying to bypass...');
-        
-        // Try to get past age verification
-        const verificationUrl = response.request.responseURL;
-        await axios.get(verificationUrl, {
-          ...axiosConfig,
-          headers: {
-            ...headers,
-            'Cookie': cookies + '; age_check_done=1',
-          }
-        });
-        
-        // Retry original URL
-        const retryResponse = await axios.get(url, axiosConfig);
-        response.data = retryResponse.data;
-      }
+      const {data, finalUrl} = result;
       
       // Try extraction methods
-      let summary = getSummaryFromJsonLd(response.data);
+      let summary = getSummaryFromJsonLd(data);
       if (summary) {
         return {
           summary,
           source: 'json-ld',
-          url,
+          url: finalUrl,
           fanza_id: originalId
         };
       }
       
-      summary = getSummaryFromHtml(response.data);
+      summary = getSummaryFromHtml(data);
       if (summary) {
         return {
           summary,
           source: 'html',
-          url,
+          url: finalUrl,
           fanza_id: originalId
         };
       }
       
-      summary = getSummaryFromMeta(response.data);
+      summary = getSummaryFromMeta(data);
       if (summary) {
         return {
           summary,
           source: 'meta',
-          url,
+          url: finalUrl,
           fanza_id: originalId
         };
       }
